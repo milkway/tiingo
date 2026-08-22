@@ -1,0 +1,22 @@
+{
+  "name": "eod_daily",
+  "version": "v1",
+  "status": "frozen",
+  "description": "Esquema Arrow do cliente EOD da Tiingo (eod::SchemaVersion::V1). Preços BRUTOS com 6 decimais implícitos como inteiros (_e6; a era fracionária pré-2001 chega da Tiingo com até 6 casas); insumos de ajuste diários (div_cash, split_factor — float: precisão arbitrária do provedor, dividendos de ETF chegam com 8 decimais) para a série ajustada ser decisão explícita do consumidor; adj_close_provider é referência de conferência (float), nunca preço canônico. Precisão além do declarado é erro de formato, nunca arredondamento silencioso. Congelado na v0.1: mudança gera v2.",
+  "fields": [
+    { "name": "ticker", "type": "utf8", "nullable": false },
+    { "name": "refdate", "type": "date32", "nullable": false },
+    { "name": "open_e6", "type": "int64", "nullable": false },
+    { "name": "high_e6", "type": "int64", "nullable": false },
+    { "name": "low_e6", "type": "int64", "nullable": false },
+    { "name": "close_e6", "type": "int64", "nullable": false },
+    { "name": "volume", "type": "int64", "nullable": false },
+    { "name": "div_cash", "type": "float64", "nullable": false },
+    { "name": "split_factor", "type": "float64", "nullable": false },
+    { "name": "adj_close_provider", "type": "float64", "nullable": false },
+    { "name": "provider", "type": "utf8", "nullable": false },
+    { "name": "source_file_sha256", "type": "utf8", "nullable": false },
+    { "name": "ingested_at", "type": "timestamp_us_utc", "nullable": false },
+    { "name": "schema_version", "type": "utf8", "nullable": false }
+  ]
+}

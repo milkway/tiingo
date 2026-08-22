@@ -1,0 +1,62 @@
+[
+  {
+    "date": "1993-01-29T00:00:00.000Z",
+    "close": 43.9375,
+    "high": 43.9687,
+    "low": 43.75,
+    "open": 43.9687,
+    "volume": 1003200,
+    "adjClose": 24.3327,
+    "adjHigh": 24.35,
+    "adjLow": 24.2289,
+    "adjOpen": 24.35,
+    "adjVolume": 1003200,
+    "divCash": 0.0,
+    "splitFactor": 1.0
+  },
+  {
+    "date": "1993-02-01T00:00:00.000Z",
+    "close": 44.25,
+    "high": 44.25,
+    "low": 43.9687,
+    "open": 43.9687,
+    "volume": 480500,
+    "adjClose": 24.5058,
+    "adjHigh": 24.5058,
+    "adjLow": 24.35,
+    "adjOpen": 24.35,
+    "adjVolume": 480500,
+    "divCash": 0.0,
+    "splitFactor": 1.0
+  },
+  {
+    "date": "1993-03-19T00:00:00.000Z",
+    "close": 45.0625,
+    "high": 45.125,
+    "low": 44.8125,
+    "open": 44.875,
+    "volume": 313800,
+    "adjClose": 25.0733,
+    "adjHigh": 25.108,
+    "adjLow": 24.9341,
+    "adjOpen": 24.9689,
+    "adjVolume": 313800,
+    "divCash": 0.213,
+    "splitFactor": 1.0
+  },
+  {
+    "date": "2026-08-20T00:00:00.000Z",
+    "close": 643.21,
+    "high": 645.87,
+    "low": 641.02,
+    "open": 644.35,
+    "volume": 45123400,
+    "adjClose": 643.21,
+    "adjHigh": 645.87,
+    "adjLow": 641.02,
+    "adjOpen": 644.35,
+    "adjVolume": 45123400,
+    "divCash": 0.0,
+    "splitFactor": 1.0
+  }
+]
