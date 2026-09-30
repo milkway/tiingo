@@ -1,6 +1,9 @@
 [package]
 name = "tiingo"
 version = "0.1.0"
+authors = [
+    "André Leite <leite@castlab.org>",
+]
 edition = "2024"
 rust-version = "1.85"
 description = "Cliente Tiingo para séries EOD de ações/ETFs dos EUA em Arrow/Parquet, com preços brutos em inteiros e política de ajuste explícita"
