@@ -12,6 +12,7 @@ date-released: "2026-08-22"
 repository-code: "https://github.com/milkway/tiingo"
 url: "https://crates.io/crates/tiingo"
 license: MIT
+doi: 10.5281/zenodo.23579898
 keywords:
   - Tiingo
   - end-of-day
