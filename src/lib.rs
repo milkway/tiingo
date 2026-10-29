@@ -12,13 +12,15 @@
 //!    fatores de split vêm por dia (`div_cash`, `split_factor`): a
 //!    série ajustada é decisão do consumidor, com política explícita. O
 //!    `adj_close_provider` (float) fica apenas como referência de conferência.
-//! 3. **Raw store imutável**: cada resposta é cacheada com SHA-256 e
-//!    manifesto de ingestão. O token **nunca** aparece em URL nem manifesto —
-//!    vai por header `Authorization`.
+//! 3. **Raw store imutável** (feature `fetch`, default): cada resposta é
+//!    cacheada com SHA-256 e manifesto de ingestão. O token **nunca** aparece
+//!    em URL nem manifesto — vai por header `Authorization`. Desligue a
+//!    feature para usar só o parser, sem dependências HTTP.
 //!
 //! ## Exemplo
 //!
 //! ```no_run
+//! # #[cfg(feature = "fetch")]
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use tiingo::eod::{self, Cache, SchemaVersion};
 //!
@@ -29,6 +31,8 @@
 //! eod::to_parquet(&[batch], "spy.parquet".as_ref(), SchemaVersion::V1)?;
 //! # Ok(())
 //! # }
+//! # #[cfg(not(feature = "fetch"))]
+//! # fn main() {}
 //! ```
 
 pub mod eod;
@@ -53,6 +57,11 @@ pub enum Error {
     },
     #[error("falha na chamada à Tiingo ({url}): {reason}")]
     Http { url: String, reason: String },
+    #[error("período inválido: início {start} depois do fim {end}")]
+    InvalidRange {
+        start: chrono::NaiveDate,
+        end: chrono::NaiveDate,
+    },
     #[error("resposta da Tiingo fora do esperado: {0} — quarentena, nunca descarte silencioso")]
     UnexpectedPayload(String),
     #[error("erro Arrow: {0}")]

@@ -22,8 +22,10 @@ consome o endpoint EOD com três decisões de projeto:
    decisão sua, com política explícita — `adj_close_provider` (float) fica só
    como referência de conferência.
 3. **Raw store imutável**: cada resposta é cacheada com SHA-256 e manifesto de
-   ingestão. O token vai **somente** no header `Authorization` — nunca em URL,
-   cache ou manifesto (há teste garantindo).
+   ingestão, chaveada por `(ticker, start, end)`. O token vai **somente** no
+   header `Authorization` — nunca em URL, cache ou manifesto (há teste
+   garantindo). Datas repetidas ou fora de ordem no payload são erro, não
+   linhas duplicadas no dataset.
 
 ## Uso
 
@@ -44,13 +46,23 @@ Ou direto pelo exemplo:
 TIINGO_API_KEY=... cargo run --release --example backfill_eod -- SPY 1993-01-01 2026-08-21
 ```
 
+### Features
+
+| Feature | Default | O que traz |
+|---|---|---|
+| `fetch` | ✅ | download com cache local imutável, SHA-256 e manifesto (reqwest/sha2) |
+
+Só quer o parser sobre um JSON já em disco? `default-features = false` e
+nenhuma dependência HTTP entra. MSRV: Rust 1.88 (verificada no CI).
+
 ## Testes
 
 - Unitários e de contrato rodam offline (fixtures no formato documentado da
   API).
 - `tests/live_api.rs` valida contra a API real, gated por `TIINGO_API_KEY`
   (skip limpo sem a variável; o CI não depende de credencial). Inclui teste de
-  não-vazamento do token no raw store.
+  não-vazamento do token no raw store. Para carregar a chave de um `.env` sem
+  imprimi-la: `tools/run-with-env.sh cargo test --test live_api`.
 
 ## Licença
 

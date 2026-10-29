@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Semanal: pega advisories novos mesmo sem commits.
+    - cron: "23 6 * * 1"
 
 jobs:
   rust:
@@ -15,6 +18,30 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings
       - name: testes (o live test pula sem TIINGO_API_KEY)
         run: cargo test
+      - run: cargo test --no-default-features
+      - run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+
+  # A MSRV declarada em Cargo.toml tem de compilar de fato, com as features default.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets --all-features
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Cargo.lock não é versionado (crate de biblioteca): gera-se aqui, o que
+      # audita a resolução que um consumidor novo receberia hoje.
+      - run: cargo generate-lockfile
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

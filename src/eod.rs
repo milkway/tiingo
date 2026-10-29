@@ -20,7 +20,6 @@ use chrono::{DateTime, NaiveDate, Utc};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
-use sha2::Digest;
 
 use crate::Error;
 
@@ -100,14 +99,29 @@ pub struct ParseContext {
     pub ingested_at: DateTime<Utc>,
 }
 
-const BASE_URL: &str = "https://api.tiingo.com/tiingo/daily";
+/// Nome (sem extensão) do arquivo de cache de uma consulta: a chave do raw
+/// store é `(ticker, start, end)`.
+pub fn cache_stem(ticker: &str, start: NaiveDate, end: NaiveDate) -> String {
+    format!(
+        "tiingo_eod_{}_{}_{}",
+        ticker.to_ascii_uppercase(),
+        start.format("%Y%m%d"),
+        end.format("%Y%m%d")
+    )
+}
 
 /// Baixa a série EOD do ticker no período e a guarda imutável no cache
 /// (JSON bruto + SHA-256 + manifesto). Idempotente: com o JSON já em cache,
 /// nada é baixado e a proveniência vem do manifesto.
 ///
+/// A chave do cache é `(ticker, start, end)` — ver [`cache_stem`]. Como o
+/// raw store é imutável, uma consulta com `end` no dia corrente, feita antes
+/// do fechamento, fica em cache incompleta para sempre sob essa chave; para
+/// séries "até hoje", use `end` = último pregão encerrado.
+///
 /// O token vai **somente** no header `Authorization` — nunca em URL, cache ou
 /// manifesto.
+#[cfg(feature = "fetch")]
 pub fn fetch(
     ticker: &str,
     start: NaiveDate,
@@ -115,12 +129,14 @@ pub fn fetch(
     token: &str,
     cache: &Cache,
 ) -> Result<Fetched, Error> {
-    let stem = format!(
-        "tiingo_eod_{}_{}_{}",
-        ticker.to_ascii_uppercase(),
-        start.format("%Y%m%d"),
-        end.format("%Y%m%d")
-    );
+    use sha2::Digest;
+
+    const BASE_URL: &str = "https://api.tiingo.com/tiingo/daily";
+
+    if start > end {
+        return Err(Error::InvalidRange { start, end });
+    }
+    let stem = cache_stem(ticker, start, end);
     let json_path = cache.dir.join(format!("{stem}.json"));
     let manifest_path = cache.dir.join(format!("{stem}.manifest.json"));
 
@@ -271,18 +287,36 @@ pub fn parse_bytes(bytes: &[u8], ctx: &ParseContext) -> Result<RecordBatch, Erro
     let mut b_schema = StringBuilder::new();
 
     let num = |row: &serde_json::Value, name: &str, i: usize| -> Result<f64, Error> {
-        row[name]
-            .as_f64()
-            .ok_or_else(|| Error::UnexpectedPayload(format!("linha {i}: campo {name} ausente")))
+        row[name].as_f64().ok_or_else(|| {
+            Error::UnexpectedPayload(format!(
+                "linha {i}: campo {name} ausente, nulo ou não numérico"
+            ))
+        })
     };
 
+    let mut previous: Option<NaiveDate> = None;
     for (i, row) in rows.iter().enumerate() {
         let date_str = row["date"]
             .as_str()
             .ok_or_else(|| Error::UnexpectedPayload(format!("linha {i}: campo date ausente")))?;
-        // "1993-01-29T00:00:00.000Z" → só a data interessa no EOD.
-        let refdate = NaiveDate::parse_from_str(&date_str[..10.min(date_str.len())], "%Y-%m-%d")
-            .map_err(|e| Error::UnexpectedPayload(format!("linha {i}: date {date_str:?}: {e}")))?;
+        // "1993-01-29T00:00:00.000Z" → só a data interessa no EOD. `get` em
+        // vez de slice: um byte multibyte no prefixo não pode derrubar o parser.
+        let refdate = date_str
+            .get(..10)
+            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+            .ok_or_else(|| {
+                Error::UnexpectedPayload(format!("linha {i}: date {date_str:?} não é AAAA-MM-DD"))
+            })?;
+        // A Tiingo entrega em ordem crescente, um pregão por linha; repetição
+        // ou retrocesso é anomalia do provedor — quarentena, não dataset.
+        if let Some(prev) = previous
+            && refdate <= prev
+        {
+            return Err(Error::UnexpectedPayload(format!(
+                "linha {i}: date {refdate} não é posterior à anterior ({prev}) — duplicata ou fora de ordem"
+            )));
+        }
+        previous = Some(refdate);
 
         let volume = num(row, "volume", i)?;
         if volume.fract() != 0.0 || volume < 0.0 {
@@ -461,6 +495,71 @@ mod tests {
             "splitFactor":1.0,"adjClose":1.0}]"#;
         let err = parse_bytes(json, &ctx()).expect_err("deve falhar");
         assert!(matches!(err, Error::UnexpectedPayload(_)));
+    }
+
+    #[test]
+    fn data_repetida_ou_fora_de_ordem_e_erro() {
+        let row = |d: &str| {
+            format!(
+                r#"{{"date":"{d}T00:00:00.000Z","open":1.0,"high":1.0,"low":1.0,"close":1.0,
+                "volume":1,"divCash":0.0,"splitFactor":1.0,"adjClose":1.0}}"#
+            )
+        };
+        let dup = format!("[{},{}]", row("2026-08-20"), row("2026-08-20"));
+        let err = parse_bytes(dup.as_bytes(), &ctx()).expect_err("duplicata");
+        assert!(err.to_string().contains("duplicata"), "{err}");
+        let desc = format!("[{},{}]", row("2026-08-21"), row("2026-08-20"));
+        let err = parse_bytes(desc.as_bytes(), &ctx()).expect_err("fora de ordem");
+        assert!(matches!(err, Error::UnexpectedPayload(_)));
+        let ok = format!("[{},{}]", row("2026-08-20"), row("2026-08-21"));
+        assert_eq!(
+            parse_bytes(ok.as_bytes(), &ctx())
+                .expect("ordem ok")
+                .num_rows(),
+            2
+        );
+    }
+
+    #[test]
+    fn date_malformada_e_erro_sem_panico() {
+        // Prefixo com byte multibyte: um slice por bytes aqui derrubaria o parser.
+        let json = r#"[{"date":"éééééé","open":1.0,"high":1.0,"low":1.0,
+            "close":1.0,"volume":1,"divCash":0.0,"splitFactor":1.0,"adjClose":1.0}]"#;
+        let err = parse_bytes(json.as_bytes(), &ctx()).expect_err("deve falhar");
+        assert!(matches!(err, Error::UnexpectedPayload(_)));
+    }
+
+    #[test]
+    fn campo_nulo_e_erro_explicito() {
+        let json = br#"[{"date":"2026-08-20T00:00:00.000Z","open":null,"high":1.0,"low":1.0,
+            "close":1.0,"volume":1,"divCash":0.0,"splitFactor":1.0,"adjClose":1.0}]"#;
+        let err = parse_bytes(json, &ctx()).expect_err("deve falhar");
+        assert!(err.to_string().contains("open"), "{err}");
+    }
+
+    #[test]
+    fn nome_do_cache_e_estavel() {
+        let d = |y, m, dd| NaiveDate::from_ymd_opt(y, m, dd).expect("data");
+        assert_eq!(
+            cache_stem("spy", d(1993, 1, 1), d(2026, 10, 28)),
+            "tiingo_eod_SPY_19930101_20261028"
+        );
+    }
+
+    #[cfg(feature = "fetch")]
+    #[test]
+    fn periodo_invertido_e_erro_antes_de_qualquer_rede() {
+        let d = |y, m, dd| NaiveDate::from_ymd_opt(y, m, dd).expect("data");
+        let cache = Cache {
+            dir: std::env::temp_dir().join("tiingo-test-range"),
+        };
+        let err = fetch("SPY", d(2026, 2, 1), d(2026, 1, 1), "token-falso", &cache)
+            .expect_err("deve falhar");
+        assert!(matches!(err, Error::InvalidRange { .. }), "{err}");
+        assert!(
+            !cache.dir.exists(),
+            "não deve criar cache para pedido inválido"
+        );
     }
 
     #[test]

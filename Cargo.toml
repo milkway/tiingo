@@ -1,11 +1,11 @@
 [package]
 name = "tiingo"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     "André Leite <leite@castlab.org>",
 ]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Cliente Tiingo para séries EOD de ações/ETFs dos EUA em Arrow/Parquet, com preços brutos em inteiros e política de ajuste explícita"
 license = "MIT"
 repository = "https://github.com/milkway/tiingo"
@@ -13,14 +13,28 @@ readme = "README.md"
 keywords = ["tiingo", "finance", "eod", "stocks", "arrow"]
 categories = ["finance", "api-bindings"]
 
+[features]
+default = ["fetch"]
+# Download com cache, SHA-256 e manifesto de ingestão. Desligável para quem só
+# quer o parser (payload já em disco), sem herdar dependências HTTP.
+fetch = ["dep:reqwest", "dep:sha2"]
+
 [dependencies]
-arrow = "59"
-parquet = "59"
+arrow = "60"
+# Só o que o crate usa: ponte Arrow e compressão Snappy. Os demais codecs
+# (zstd, brotli, lz4, flate2) só entrariam como peso morto e superfície de
+# advisories; quem precisar lê-los habilita a feature no próprio parquet.
+parquet = { version = "60", default-features = false, features = ["arrow", "snap"] }
 chrono = "0.4"
-reqwest = { version = "0.13", features = ["blocking"] }
+reqwest = { version = "0.13", features = ["blocking"], optional = true }
 serde_json = "1"
-sha2 = "0.11"
+sha2 = { version = "0.11", optional = true }
 thiserror = "2"
 
 [[example]]
 name = "backfill_eod"
+required-features = ["fetch"]
+
+[[test]]
+name = "live_api"
+required-features = ["fetch"]
